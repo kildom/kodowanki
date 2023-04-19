@@ -175,7 +175,8 @@
             html += `</table>`;
             document.getElementById("palette").innerHTML = html;
 
-            html = `<table border=1 cellpadding=7>`;
+            html = `<table border=1 cellpadding=7 style="break-inside: avoid;">`;
+            let stats = [];
             for (let g of groups) {
                 if (groups[selectedGroup] === g || colorDiff(g, { r: 255, g: 255, b: 255 }) <= maxColorDiff) {
                     continue;
@@ -185,7 +186,11 @@
                     html += String.fromCharCode('A'.charCodeAt(0) + instr.x) + (instr.y + 1) + ' &nbsp; ';
                 }
                 html += `</td></tr>`;
+                stats.push(g.instr.length);
             }
+            html += `<tr><td></div></td><td>`;
+            html += stats.join(' + ');
+            html += ` = ${stats.reduce((sum, x) => sum + x, 0)}</td></tr>`;
             html += `</table>`;
             document.getElementById("result").innerHTML = html;
         }
