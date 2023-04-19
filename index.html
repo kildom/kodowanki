@@ -1,0 +1,296 @@
+<html>
+
+<head>
+    <style>
+        @media print {
+            div.print-hide {
+                display: none !important;
+            }
+            table {
+                font-size: 10pt;
+                font-family: sans-serif;
+            }
+        }
+    </style>
+
+</head>
+
+<body>
+    <div class="print-hide">
+        <button onclick="dim(0,+1)">+</button><button onclick="dim(0,-1)">-</button> &nbsp; <span id="dim">16x16</span>
+        &nbsp; <button onclick="dim(1,+1)">+</button><button onclick="dim(1,-1)">-</button>
+        <br>
+        <button onclick="dim(2,+1)">+</button><button onclick="dim(2,-1)">-</button> &nbsp; <span id="diff">16</span>
+        <br>
+        <canvas id="canvas" width="1000" height="1000" onclick="clickImg(event)"></canvas>
+        <canvas id="out" width="1000" height="1000"></canvas>
+        <div id="palette"></div>
+        <div id="result" onclick="acceptResult()"></div>
+        <hr>
+    </div>
+
+    <div id="final"></div>
+
+    <script>
+
+        let ctx//: CanvasRenderingContext2D;
+        let img;
+        let points = [];
+        let pointsX = 13;
+        let pointsY = 16;
+        let maxColorDiff = 76;
+        let rawInstr = [];
+        let groups = [];
+        let selectedGroup = -1;
+
+        function dim(which, diff) {
+            switch (which) {
+                case 0:
+                    pointsX += diff;
+                    break;
+                case 1:
+                    pointsY += diff;
+                    break;
+                case 2:
+                    maxColorDiff += diff;
+                    break;
+            }
+            createPoints();
+            document.getElementById('dim').innerHTML = `${pointsX}x${pointsY}`;
+            document.getElementById('diff').innerHTML = `${maxColorDiff}`;
+        }
+
+        function acceptResult() {
+            document.getElementById('final').innerHTML += document.getElementById('result').innerHTML + '<br><br>';
+            document.getElementById('result').innerHTML = '';
+        }
+
+        function createPoints() {
+            ctx.fillStyle = '#FFF';
+            ctx.strokeStyle = 'none';
+            ctx.fillRect(0, 0, 1000, 1000);
+            ctx.drawImage(img, 0, 0, 1000, 1000);
+            let data = ctx.getImageData(0, 0, 1000, 1000).data;
+            let minX = Math.min(...points.map(p => p.x));
+            let maxX = Math.max(...points.map(p => p.x));
+            let minY = Math.min(...points.map(p => p.y));
+            let maxY = Math.max(...points.map(p => p.y));
+            let width = maxX - minX;
+            let height = maxY - minY;
+            rawInstr = [];
+            groups = [];
+            let groupById = {};
+            for (let y = 0; y < pointsY; y++) {
+                for (let x = 0; x < pointsX; x++) {
+                    let xx = Math.round(minX + x * width / (pointsX - 1));
+                    let yy = Math.round(minY + y * height / (pointsY - 1));
+                    let r = data[4 * xx + 4000 * yy];
+                    let g = data[4 * xx + 4000 * yy + 1];
+                    let b = data[4 * xx + 4000 * yy + 2];
+                    r += data[4 * xx + 4000 * yy + 4];
+                    g += data[4 * xx + 4000 * yy + 4 + 1];
+                    b += data[4 * xx + 4000 * yy + 4 + 2];
+                    r += data[4 * xx + 4000 * (yy + 1)];
+                    g += data[4 * xx + 4000 * (yy + 1) + 1];
+                    b += data[4 * xx + 4000 * (yy + 1) + 2];
+                    r += data[4 * xx + 4000 * (yy + 1) + 4];
+                    g += data[4 * xx + 4000 * (yy + 1) + 4 + 1];
+                    b += data[4 * xx + 4000 * (yy + 1) + 4 + 2];
+                    r = ((r + 2) >> 2) & 0xFC;
+                    g = ((g + 2) >> 2) & 0xFC;
+                    b = ((b + 2) >> 2) & 0xFC;
+                    let id = [r, g, b].join();
+                    let group;
+                    if (groupById[id] === undefined) {
+                        group = { r, g, b, instr: [], sources: [{ r, g, b }] };
+                        groups.push(group);
+                    } else {
+                        group = groupById[id];
+                    }
+                    let instr = { x, y, r, g, b, group };
+                    group.instr.push(instr);
+                    rawInstr.push(instr);
+                }
+            }
+            ctx.beginPath();
+            ctx.moveTo(minX, minY);
+            ctx.lineTo(maxX, minY);
+            ctx.lineTo(maxX, maxY);
+            ctx.lineTo(minX, maxY);
+            ctx.closePath();
+            ctx.strokeStyle = '#000';
+            ctx.stroke();
+            for (let p of points) {
+                ctx.strokeStyle = '#000';
+                ctx.fillStyle = '#0F0';
+                ctx.fillRect(p.x - 6, p.y - 6, 12, 12);
+            }
+            for (let x = 0; x < pointsX; x++) {
+                for (let y = 0; y < pointsY; y++) {
+                    let xx = minX + x * width / (pointsX - 1);
+                    let yy = minY + y * height / (pointsY - 1);
+                    ctx.beginPath();
+                    ctx.moveTo(xx + 1, yy - 9);
+                    ctx.lineTo(xx + 1, yy + 11);
+                    ctx.strokeStyle = '#FFF';
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(xx - 9, yy + 1);
+                    ctx.lineTo(xx + 11, yy + 1);
+                    ctx.strokeStyle = '#FFF';
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(xx, yy - 10);
+                    ctx.lineTo(xx, yy + 10);
+                    ctx.strokeStyle = '#000';
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(xx - 10, yy);
+                    ctx.lineTo(xx + 10, yy);
+                    ctx.strokeStyle = '#000';
+                    ctx.stroke();
+                }
+            }
+            while (reduceColors()) {
+            }
+            let html = '';
+            for (let i = 0; i < groups.length; i++) {
+                let g = groups[i];
+                html += `<div onclick="selectGroup(${i})">-`;
+                for (let color of g.sources) {
+                    html += `<div style="display: inline-block; width: 16px; height: 16px; background: rgb(${color.r},${color.g},${color.b})"></div>`;
+                }
+                html += '</div>';
+            }
+            html += `<table cellspacing="0" cellpadding="15">`;
+            for (let y = 0; y < pointsY; y++) {
+                html += `<tr>`;
+                for (let x = 0; x < pointsX; x++) {
+                    let instr = rawInstr[x + pointsX * y];
+                    let group = instr.group;
+                    html += `<td style="background: rgb(${group.r},${group.g},${group.b})">&nbsp;</td>`;
+                }
+                html += `</tr>`;
+            }
+            html += `</table>`;
+            document.getElementById("palette").innerHTML = html;
+
+            html = `<table border=1 cellpadding=7>`;
+            for (let g of groups) {
+                if (groups[selectedGroup] === g || colorDiff(g, { r: 255, g: 255, b: 255 }) <= maxColorDiff) {
+                    continue;
+                }
+                html += `<tr><td><div style="width: 2cm; height: 1cm; background: rgb(${g.r},${g.g},${g.b})"></div></td><td>`;
+                for (let instr of g.instr) {
+                    html += String.fromCharCode('A'.charCodeAt(0) + instr.x) + (instr.y + 1) + ' &nbsp; ';
+                }
+                html += `</td></tr>`;
+            }
+            html += `</table>`;
+            document.getElementById("result").innerHTML = html;
+        }
+
+        function selectGroup(index) {
+            selectedGroup = index;
+            createPoints();
+        }
+
+        function colorDiff(a, b) {
+            let dr = a.r - b.r;
+            let dg = a.g - b.g;
+            let db = a.b - b.b;
+            return Math.sqrt(dr * dr + dg * dg + db * db);
+        }
+
+        function colorAvg(arr) {
+            let ar = 0;
+            let ag = 0;
+            let ab = 0;
+            for (let item of arr) {
+                ar += item.r;
+                ag += item.g;
+                ab += item.b;
+            }
+            return {
+                r: Math.round(ar / arr.length) & 0xFC,
+                g: Math.round(ag / arr.length) & 0xFC,
+                b: Math.round(ab / arr.length) & 0xFC,
+            };
+        }
+
+        function reduceColors() {
+            for (let a of groups) {
+                for (let b of groups) {
+                    if (a === b) continue;
+                    if (colorDiff(a, b) <= maxColorDiff) {
+                        let tooFar = a.sources.find(ca => b.sources.find(cb => colorDiff(ca, cb) > maxColorDiff));
+                        if (!tooFar) {
+                            a.sources.push(...b.sources);
+                            a.instr.push(...b.instr);
+                            b.instr.forEach(instr => instr.group = a);
+                            let avg = colorAvg(a.sources);
+                            a.r = avg.r;
+                            a.g = avg.g;
+                            a.b = avg.b;
+                            let bIndex = groups.findIndex(g => g === b);
+                            console.log(bIndex);
+                            groups.splice(bIndex, 1);
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        function clickImg(event) {
+            let [x, y] = [event.offsetX, event.offsetY];
+            if (points.length == 4) {
+                let dist = points.map(p => (x - p.x) * (x - p.x) + (y - p.y) * (y - p.y));
+                let iMin = dist.reduce((iMin, x, i, arr) => x < arr[iMin] ? i : iMin, 0);
+                points[iMin].x = x;
+                points[iMin].y = y;
+                console.log(points);
+                console.log(iMin);
+                console.log(dist);
+            } else {
+                points.push({ x, y });
+            }
+
+            if (points.length == 4) {
+                createPoints();
+            }
+        }
+
+        document.addEventListener('paste', async (e) => {
+            e.preventDefault();
+            points = [];
+            for (const clipboardItem of e.clipboardData.files) {
+                if (clipboardItem.type.startsWith('image/')) {
+                    let url = URL.createObjectURL(clipboardItem);
+                    img = new Image();
+                    img.onload = () => {
+                        let canvas = document.getElementById('canvas');
+                        ctx = canvas.getContext('2d', { willReadFrequently: true });
+                        ctx.drawImage(img, 0, 0, 1000, 1000);
+                    };
+                    img.src = url;
+                }
+            }
+        });
+
+        /*setTimeout(() => {
+            let url = 'https://art.pixilart.com/44cb602d5a57df2.png';
+            img = new Image();
+            img.onload = () => {
+                let canvas = document.getElementById('canvas');
+                ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0, 1000, 1000);
+            };
+            img.src = url;
+        }, 500);*/
+
+    </script>
+</body>
+
+</html>
